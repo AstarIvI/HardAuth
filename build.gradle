@@ -1,0 +1,57 @@
+plugins {
+    id 'fabric-loom' version '1.0.16'
+    id 'java'
+    id "com.github.johnrengelman.shadow" version "7.1.2"
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+    maven { url = 'https://m2.dv8tion.net/releases' }
+    maven { url = 'https://oss.sonatype.org/content/repositories/snapshots' }
+    maven { url = 'https://jitpack.io' }
+    maven { url = 'https://maven.fabricmc.net' }
+}
+
+sourceCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
+
+archivesBaseName = project.archives_base_name
+version = project.mod_version
+group = project.maven_group
+
+dependencies {
+    minecraft "com.mojang:minecraft:1.19.3"
+    mappings "net.fabricmc:yarn:1.19.3+build.5"
+    modImplementation "net.fabricmc:fabric-loader:0.14.12"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:0.70.0+1.19.3"
+    shadow "com.h2database:h2:2.1.214"
+}
+
+processResources {
+    inputs.property "version", project.version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach{
+    it.options.encoding = "UTF-8"
+    it.options.release = 17
+}
+
+java {
+    withSourcesJar()
+}
+
+shadowJar {
+    configurations = [project.configurations.shadow]
+}
+
+remapJar{
+    dependsOn shadowJar
+    input.set shadowJar.archiveFile.get()
+}
+
+build.dependsOn(shadowJar);

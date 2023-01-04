@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "hardauth",
+  "name": "HardAuth",
+  "version": "${version}",
+  "description": "Password based authentication for your server, with a focus on minimal resource consumption and high player counts.",
+  "contact": {
+    "homepage": "https://github.com/AstarIvI",
+    "sources": "https://github.com/AstarIvI"
+  },
+  "authors": [
+    "astarivi"
+  ],
+  "environment": "server",
+  "depends": {
+    "fabricloader": ">=0.11.3",
+    "fabric": ">=0.40.1",
+    "minecraft": "1.19.3",
+    "java": ">=17"
+  },
+  "entrypoints": {
+    "server": [
+      "com.astarivi.hardauth.HardAuth"
+    ]
+  },
+  "mixins": [
+    "hardauth.mixins.json"
+  ]
+}
