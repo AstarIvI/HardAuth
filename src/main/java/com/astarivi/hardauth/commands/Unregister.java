@@ -1,5 +1,6 @@
 package com.astarivi.hardauth.commands;
 
+import com.astarivi.hardauth.database.DatabaseQueue;
 import com.astarivi.hardauth.player.PlayerSession;
 import com.astarivi.hardauth.player.PlayerStorage;
 import com.mojang.brigadier.CommandDispatcher;
@@ -19,14 +20,25 @@ public class Unregister{
     }
 
     private static int run(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        final ServerCommandSource source = context.getSource();
         ServerPlayerEntity player = context.getSource().getPlayer();
         PlayerSession playerSession = PlayerStorage.getPlayerSession(player.getUuid());
 
         if (playerSession == null) return 1;
 
-        playerSession.removeUser();
-        playerSession.setAuthorized(false);
-        playerSession.getPlayer().networkHandler.disconnect(Text.of("Successfully unregistered, please rejoin and register again."));
+        if (playerSession.isBlocked()) {
+            source.sendFeedback(Text.of(
+                            "§cWe couldn't process your current request right now, as your last request is still " +
+                                    "being processed. Please try again later."),
+                    false
+            );
+            return 1;
+        }
+
+        playerSession.removeUser(() -> {
+            playerSession.setAuthorized(false);
+            playerSession.getPlayer().networkHandler.disconnect(Text.of("Successfully unregistered, please rejoin and register again."));
+        });
 
         return 1;
     }

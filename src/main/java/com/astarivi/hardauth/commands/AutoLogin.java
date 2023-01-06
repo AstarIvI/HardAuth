@@ -1,5 +1,6 @@
 package com.astarivi.hardauth.commands;
 
+import com.astarivi.hardauth.database.DatabaseQueue;
 import com.astarivi.hardauth.player.PlayerSession;
 import com.astarivi.hardauth.player.PlayerStorage;
 import com.mojang.brigadier.CommandDispatcher;
@@ -25,17 +26,33 @@ public class AutoLogin{
 
         if (playerSession == null) return 1;
 
-        if (playerSession.hasChangedAutoLogin()) {
+        if (playerSession.isBlocked()) {
             source.sendFeedback(Text.of(
-                            "§cYou can only change this setting once per game session.\n§eTo change your autologin value, please rejoin the server."),
+                "§cWe couldn't process your current request right now, as your last request is still " +
+                        "being processed. Please try again later."),
                     false
             );
             return 1;
         }
 
-        playerSession.setAutoLogin(!playerSession.isAutoLogin(), true);
-        final String feedback = playerSession.isAutoLogin() ? "activated." : "deactivated.";
-        source.sendFeedback(Text.of("§aAutologin has been " + feedback), false);
+        if (playerSession.hasChangedAutoLogin()) {
+            source.sendFeedback(Text.of(
+                 "§cYou can only change this setting once per game session.\n§eTo change your autologin value, please rejoin the server."),
+                    false
+            );
+            return 1;
+        }
+
+        playerSession.setAutoLogin(
+            !playerSession.isAutoLogin(),
+            true,
+            () -> {
+                final String feedback = playerSession.isAutoLogin() ? "activated." : "deactivated.";
+                playerSession.getPlayer().sendMessage(
+                        Text.of("§aAutologin has been " + feedback)
+                );
+            }
+        );
 
         return 1;
     }

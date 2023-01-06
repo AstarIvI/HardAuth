@@ -39,8 +39,11 @@ public class HardAuth implements DedicatedServerModInitializer {
     }
 
     private void onStop(MinecraftServer server) {
+        System.out.println(">>>HardAuth: Shutting HardAuth down gracefully...");
         threadingManager.shutdown();
+        System.out.println(">HardAuth: Saving configuration files.");
         config.save();
+        System.out.println(">>>HardAuth: Finished graceful shutdown.");
     }
 
     public static ConfigFile getConfig() {
@@ -62,6 +65,5 @@ public class HardAuth implements DedicatedServerModInitializer {
         );
 
         database.check();
-        PlayerSession.setDatabase(database);
     }
 }

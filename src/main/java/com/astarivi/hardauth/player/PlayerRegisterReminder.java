@@ -43,10 +43,12 @@ public class PlayerRegisterReminder {
                 ServerPlayerEntity player = playerPending.player;
                 try {
                     PlayerSession playerSession = PlayerStorage.getPlayerSession(player.getUuid());
+
                     if (playerSession == null || !player.networkHandler.getConnection().isOpen()) {
                         playerIterator.remove();
                         continue;
                     }
+
                     if (playerSession.isAuthorized()) {
                         playerIterator.remove();
                         continue;

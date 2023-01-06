@@ -1,11 +1,13 @@
 package com.astarivi.hardauth.player;
 
 import com.astarivi.hardauth.database.Database;
-import com.astarivi.hardauth.HardAuth;
+import com.astarivi.hardauth.database.DatabaseQueue;
+import com.astarivi.hardauth.utils.PasswordChecker;
 import com.astarivi.hardauth.utils.RandomRGBColor;
 
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.entity.AreaEffectCloudEntity;
+import net.minecraft.text.Text;
 import net.minecraft.world.GameMode;
 
 import java.util.UUID;
@@ -17,6 +19,7 @@ import java.util.UUID;
 
 public class PlayerSession {
     private boolean authorized = false;
+    private boolean isBlocked = false;
     private boolean hasChangedAutoLogin = false;
     private boolean wasDead = false;
     private boolean autologin;
@@ -25,12 +28,15 @@ public class PlayerSession {
     private AreaEffectCloudEntity playerCloud;
     private final ServerPlayerEntity player;
     private final UUID uuid;
-    private static Database database;
 
     public PlayerSession(ServerPlayerEntity player) {
         this.player = player;
         this.uuid = player.getUuid();
-        fetchDatabase();
+        fetchFromDatabase();
+    }
+
+    public boolean isBlocked() {
+        return this.isBlocked;
     }
 
     public boolean wasDead() {
@@ -90,8 +96,17 @@ public class PlayerSession {
     }
 
     public void updateStoredIp() {
-        this.storedIp = this.player.getIp();
-        database.changeIp(uuid.toString(), storedIp);
+        this.isBlocked = true;
+
+        DatabaseQueue.submitToQueue(
+                (database) -> {
+                    final String playerIp = this.player.getIp();
+                    database.changeIp(this.uuid.toString(), playerIp);
+                    this.storedIp = playerIp;
+
+                    this.isBlocked = false;
+                }
+        );
     }
 
     public boolean isAutoLogin() {
@@ -102,46 +117,103 @@ public class PlayerSession {
         return hasChangedAutoLogin;
     }
 
-    public void setAutoLogin(boolean value, boolean applyRateLimit) {
-        database.changeAutoLogin(uuid.toString(), value);
-        this.autologin = value;
-        if (!applyRateLimit) return;
-        hasChangedAutoLogin = true;
+    public void setAutoLogin(boolean value, boolean applyRateLimit, DatabaseQueue.DatabaseResult result) {
+        if (this.autologin == value) {
+            if (result == null) return;
+            result.run();
+            return;
+        }
+
+        this.isBlocked = true;
+
+        DatabaseQueue.submitToQueue(
+                (database) -> {
+                    database.changeAutoLogin(uuid.toString(), value);
+
+                    this.autologin = value;
+                    if (!applyRateLimit) {
+                        this.isBlocked = false;
+                        return;
+                    }
+
+                    this.hasChangedAutoLogin = true;
+                    this.isBlocked = false;
+                    result.run();
+                }
+        );
     }
 
     public String getPasswordHash() {
         return password;
     }
 
-    public void addUser(String hash) {
-        database.addUser(uuid.toString(), hash, this.player.getIp());
-        password = hash;
-        autologin = false;
-        storedIp = this.player.getIp();
+    public void addUser(String password, DatabaseQueue.DatabaseResult result) {
+        this.isBlocked = true;
+
+        DatabaseQueue.submitToQueue(
+                (database) -> {
+                    String hash;
+                    try {
+                        hash = PasswordChecker.getSaltedHash(password);
+                    } catch (Exception e) {
+                        this.isBlocked = false;
+                        this.getPlayer().networkHandler.disconnect(
+                                Text.of("Your password couldn't be stored. Please reconnect and try with another password.")
+                        );
+                        return;
+                    }
+
+                    database.addUser(
+                            this.uuid.toString(),
+                            hash,
+                            this.player.getIp()
+                    );
+
+                    this.password = hash;
+                    this.autologin = false;
+                    this.storedIp = null;
+                    this.isBlocked = false;
+                    result.run();
+                }
+        );
     }
 
-    public void removeUser() {
-        database.removeUser(uuid.toString());
-        password = null;
-        autologin = false;
-        storedIp = null;
+    public void removeUser(DatabaseQueue.DatabaseResult result) {
+        this.isBlocked = true;
+
+        DatabaseQueue.submitToQueue(
+                (database) -> {
+                    database.removeUser(uuid.toString());
+
+                    this.password = null;
+                    this.autologin = false;
+                    this.storedIp = null;
+                    this.isBlocked = false;
+                    result.run();
+                }
+        );
     }
 
     public void authReminder() {
         PlayerRegisterReminder.addPlayerPendingLogin(player);
     }
 
-    public static void setDatabase(Database db) {
-        database = db;
-    }
+    private void fetchFromDatabase() {
+        this.isBlocked = true;
 
-    private void fetchDatabase() {
-        final String[] fetchResult = database.fetchUser(this.uuid.toString());
-        if (fetchResult == null)
-            return;
+        DatabaseQueue.submitToQueue(
+            (database) -> {
+                final String[] fetchResult = database.fetchUser(this.uuid.toString());
+                if (fetchResult == null) {
+                    this.isBlocked = false;
+                    return;
+                }
 
-        this.password = fetchResult[0];
-        this.autologin = Boolean.parseBoolean(fetchResult[1]);
-        this.storedIp = fetchResult[2];
+                this.password = fetchResult[0];
+                this.autologin = Boolean.parseBoolean(fetchResult[1]);
+                this.storedIp = fetchResult[2];
+                this.isBlocked = false;
+            }
+        );
     }
 }

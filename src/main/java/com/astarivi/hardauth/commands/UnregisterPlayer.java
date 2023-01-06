@@ -1,5 +1,6 @@
 package com.astarivi.hardauth.commands;
 
+import com.astarivi.hardauth.database.DatabaseQueue;
 import com.astarivi.hardauth.player.PlayerSession;
 import com.astarivi.hardauth.player.PlayerStorage;
 
@@ -50,17 +51,28 @@ public class UnregisterPlayer{
             return 1;
         }
 
-        playerSession.removeUser();
-        playerSession.setAuthorized(false);
-        playerSession.getPlayer().networkHandler.disconnect(
-                Text.of("An administrator has reset your credentials. Please rejoin and register again.")
-        );
+        if (playerSession.isBlocked()) {
+            source.sendFeedback(Text.of(
+                            "§cThe specified player is currently blocked due to a pending database operation. This" +
+                                    "could be caused due to a high load on the HardAuth authentication system, a" +
+                                    "problem with the database file, slow storage, or you ran this command just as" +
+                                    "the user requested resources from the database. Please try again later"),
+                    false
+            );
+            return 1;
+        }
+
+        playerSession.removeUser(() -> {
+            playerSession.setAuthorized(false);
+            playerSession.getPlayer().networkHandler.disconnect(
+                    Text.of("An administrator has reset your credentials. Please rejoin and register again.")
+            );
+        });
 
         source.sendFeedback(
                 Text.of("§aThe user credentials have been removed, and the user has been de-authorized."),
                 false
         );
-
 
         return 1;
     }

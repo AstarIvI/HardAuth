@@ -1,5 +1,6 @@
 package com.astarivi.hardauth.commands;
 
+import com.astarivi.hardauth.database.DatabaseQueue;
 import com.astarivi.hardauth.utils.PasswordChecker;
 import com.astarivi.hardauth.player.PlayerSession;
 import com.astarivi.hardauth.player.PlayerStorage;
@@ -41,6 +42,15 @@ public class Login {
 
         if (playerSession == null) return 1;
 
+        if (playerSession.isBlocked()) {
+            source.sendFeedback(Text.of(
+                            "§cWe couldn't process your current request right now, as your credentials are still " +
+                                    "being loaded. Please try again later."),
+                    false
+            );
+            return 1;
+        }
+
         if (playerSession.isAuthorized()) {
             source.sendFeedback(Text.of("§cYou are already authorized."), false);
             return 1;
@@ -58,59 +68,68 @@ public class Login {
 
         Vec3d playerPosition = player.getPos();
 
+        boolean passwordCorrect;
+
         try {
-            if (PasswordChecker.check(password, hash)) {
-                playerSession.setAuthorized(true);
-                playerSession.setSurvival();
-                source.sendFeedback(Text.of("§aLogged in"), false);
-                player.networkHandler.sendPacket(
-                        new PlaySoundS2CPacket(
-                                RegistryEntry.of(
-                                        SoundEvent.of(
-                                            new Identifier("minecraft:block.note_block.pling")
-                                )),
-                                SoundCategory.MASTER,
-                                playerPosition.x,
-                                playerPosition.y,
-                                playerPosition.z,
-                                100f,
-                                0f,
-                                0
-                        )
-                );
-
-                // The player had to log in as their IP has changed.
-                if (playerSession.isAutoLogin()) {
-                    playerSession.updateStoredIp();
-                }
-
-            } else {
-                player.networkHandler.sendPacket(
-                        new PlaySoundS2CPacket(
-                                RegistryEntry.of(
-                                        SoundEvent.of(
-                                                new Identifier("minecraft:entity.zombie.attack_iron_door")
-                                        )),
-                                SoundCategory.MASTER,
-                                playerPosition.x,
-                                playerPosition.y,
-                                playerPosition.z,
-                                20f,
-                                0.5f,
-                                0
-                        )
-                );
-                source.sendFeedback(Text.of("§cIncorrect password, please try again."), false);
-            }
+            passwordCorrect = PasswordChecker.check(password, hash);
         } catch (Exception e) {
             e.printStackTrace();
-            playerSession.removeUser();
-            playerSession.setAuthorized(false);
-            playerSession.getPlayer().networkHandler.disconnect(Text.of("Your password has been reset, please rejoin and register again."));
+            playerSession.removeUser(() -> {
+                playerSession.setAuthorized(false);
+                playerSession.getPlayer().networkHandler.disconnect(
+                        Text.of("Your password has been reset, please rejoin and register again.")
+                );
+            });
+            return 1;
         }
 
+        if (passwordCorrect) {
+            playerSession.setAuthorized(true);
+            playerSession.setSurvival();
+            source.sendFeedback(Text.of("§aLogged in"), false);
+            player.networkHandler.sendPacket(
+                    new PlaySoundS2CPacket(
+                            RegistryEntry.of(
+                                    SoundEvent.of(
+                                        new Identifier("minecraft:block.note_block.pling")
+                            )),
+                            SoundCategory.MASTER,
+                            playerPosition.x,
+                            playerPosition.y,
+                            playerPosition.z,
+                            100f,
+                            0f,
+                            0
+                    )
+            );
+
+            // The player had to log in as their IP has changed.
+            if (playerSession.isAutoLogin()) {
+                playerSession.updateStoredIp();
+            }
+
+        } else {
+            player.networkHandler.sendPacket(
+                    new PlaySoundS2CPacket(
+                            RegistryEntry.of(
+                                    SoundEvent.of(
+                                            new Identifier("minecraft:entity.zombie.attack_iron_door")
+                                    )),
+                            SoundCategory.MASTER,
+                            playerPosition.x,
+                            playerPosition.y,
+                            playerPosition.z,
+                            20f,
+                            0.5f,
+                            0
+                    )
+            );
+            source.sendFeedback(Text.of("§cIncorrect password, please try again."), false);
+        }
+
+
         if (playerSession.wasDead()) {
-            playerSession.getPlayer().networkHandler.disconnect(Text.of("As you've been respawned, please join again."));
+            playerSession.getPlayer().networkHandler.disconnect(Text.of("Your position has been fixed, please join again."));
         }
 
         return 1;

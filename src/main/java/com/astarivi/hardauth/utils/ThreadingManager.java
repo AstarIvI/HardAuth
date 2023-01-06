@@ -18,6 +18,9 @@ public class ThreadingManager {
     }
 
     public void shutdown(){
+        System.out.println(">HardAuth: Shutting down scheduler threads.");
         schedulerExecutor.shutdownNow();
+        System.out.println(">>HardAuth: Syncing database before quitting. Quitting now may result in database corruption.");
+        databaseExecutor.shutdown();
     }
 }

@@ -1,6 +1,7 @@
 package com.astarivi.hardauth.commands;
 
 import com.astarivi.hardauth.HardAuth;
+import com.astarivi.hardauth.database.DatabaseQueue;
 import com.astarivi.hardauth.utils.PasswordChecker;
 import com.astarivi.hardauth.player.PlayerSession;
 import com.astarivi.hardauth.player.PlayerStorage;
@@ -43,6 +44,15 @@ public class Register {
 
         if (playerSession == null) return 1;
 
+        if (playerSession.isBlocked()) {
+            source.sendFeedback(Text.of(
+                            "§cWe couldn't process your current request right now, as your last request is still " +
+                                    "being processed. Please try again later."),
+                    false
+            );
+            return 1;
+        }
+
         if (playerSession.isAuthorized()) {
             source.sendFeedback(Text.of("§cYou are already authorized."), false);
             return 1;
@@ -59,23 +69,21 @@ public class Register {
 
         final boolean autologin = HardAuth.getConfig().getBooleanProperty("autoLoginDefault", false);
 
-        try{
-            String hash = PasswordChecker.getSaltedHash(password);
-            playerSession.addUser(hash);
+        playerSession.addUser(password, () -> {
             playerSession.setAuthorized(true);
             playerSession.setSurvival();
-            playerSession.setAutoLogin(autologin, false);
-        } catch (Exception i){
-            i.printStackTrace();
-        }
+            playerSession.setAutoLogin(autologin, false, () -> {
+                playerSession.getPlayer().sendMessage(
+                        Text.of("§aWelcome.")
+                );
 
-        source.sendFeedback(Text.of("§aWelcome."), false);
-
-        if (playerSession.wasDead()) {
-            playerSession.getPlayer().networkHandler.disconnect(
-                    Text.of("As you've been respawned, please join again.")
-            );
-        }
+                if (playerSession.wasDead()) {
+                    playerSession.getPlayer().networkHandler.disconnect(
+                            Text.of("You've been disconnected to fix your position, please join again.")
+                    );
+                }
+            });
+        });
 
         return 1;
     }
